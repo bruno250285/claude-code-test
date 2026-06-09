@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import requests
@@ -93,25 +94,30 @@ def format_duration(seconds):
     return f"{m}m {s:02d}s"
 
 
-def print_summary(activity):
+def print_summary(activity, index=None, total=None):
     date = activity.get("start_date_local", "")[:10]
-    print("\n--- Latest Strava Activity ---")
+    header = "--- Latest Strava Activity ---" if total == 1 else f"--- Activity {index}/{total} ---"
+    print(f"\n{header}")
     print(f"  Name      : {activity.get('name')}")
     print(f"  Type      : {activity.get('sport_type', activity.get('type'))}")
     print(f"  Date      : {date}")
     print(f"  Distance  : {format_distance(activity.get('distance', 0))}")
     print(f"  Moving time: {format_duration(activity.get('moving_time', 0))}")
     print(f"  Elevation : {activity.get('total_elevation_gain', 0):.0f} m gain")
-    print("-----------------------------\n")
+    print("-" * 30)
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Show your latest Strava activities.")
+    parser.add_argument("--count", type=int, default=1, help="Number of activities to show (default: 1)")
+    args = parser.parse_args()
+
     token = get_token()
 
     resp = requests.get(
         f"{API_BASE}/athlete/activities",
         headers={"Authorization": f"Bearer {token}"},
-        params={"per_page": 1},
+        params={"per_page": args.count},
     )
     if not resp.ok:
         abort(f"API request failed: {resp.text}")
@@ -121,7 +127,8 @@ def main():
         print("No activities found on your Strava account.")
         return
 
-    print_summary(activities[0])
+    for i, activity in enumerate(activities, start=1):
+        print_summary(activity, index=i, total=len(activities))
 
 
 if __name__ == "__main__":
