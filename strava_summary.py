@@ -80,6 +80,40 @@ def get_token():
     return refresh_access_token()
 
 
+WMO_CODES = {
+    0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+    45: "Fog", 48: "Icy fog",
+    51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+    61: "Light rain", 63: "Rain", 65: "Heavy rain",
+    71: "Light snow", 73: "Snow", 75: "Heavy snow",
+    80: "Light showers", 81: "Showers", 82: "Heavy showers",
+    95: "Thunderstorm", 96: "Thunderstorm w/ hail", 99: "Thunderstorm w/ heavy hail",
+}
+
+
+def get_weather(lat, lng, date_str, hour):
+    resp = requests.get(
+        "https://archive-api.open-meteo.com/v1/archive",
+        params={
+            "latitude": lat,
+            "longitude": lng,
+            "start_date": date_str,
+            "end_date": date_str,
+            "hourly": "temperature_2m,precipitation,windspeed_10m,weathercode",
+            "wind_speed_unit": "kmh",
+        },
+    )
+    if not resp.ok:
+        return None
+    data = resp.json().get("hourly", {})
+    return {
+        "temp": data["temperature_2m"][hour],
+        "precip": data["precipitation"][hour],
+        "wind": data["windspeed_10m"][hour],
+        "condition": WMO_CODES.get(data["weathercode"][hour], "Unknown"),
+    }
+
+
 def format_distance(meters):
     if meters >= 1000:
         return f"{meters / 1000:.2f} km"
@@ -95,7 +129,10 @@ def format_duration(seconds):
 
 
 def print_summary(activity, index=None, total=None):
-    date = activity.get("start_date_local", "")[:10]
+    date_local = activity.get("start_date_local", "")
+    date = date_local[:10]
+    hour = int(date_local[11:13]) if len(date_local) >= 13 else 12
+
     header = "--- Latest Strava Activity ---" if total == 1 else f"--- Activity {index}/{total} ---"
     print(f"\n{header}")
     print(f"  Name      : {activity.get('name')}")
@@ -104,6 +141,18 @@ def print_summary(activity, index=None, total=None):
     print(f"  Distance  : {format_distance(activity.get('distance', 0))}")
     print(f"  Moving time: {format_duration(activity.get('moving_time', 0))}")
     print(f"  Elevation : {activity.get('total_elevation_gain', 0):.0f} m gain")
+
+    latlng = activity.get("start_latlng")
+    if latlng and len(latlng) == 2:
+        weather = get_weather(latlng[0], latlng[1], date, hour)
+        if weather:
+            print(f"  Weather   : {weather['condition']}, {weather['temp']:.1f}°C, "
+                  f"wind {weather['wind']:.0f} km/h, precip {weather['precip']:.1f} mm")
+        else:
+            print(f"  Weather   : unavailable")
+    else:
+        print(f"  Weather   : no GPS data for this activity")
+
     print("-" * 30)
 
 
